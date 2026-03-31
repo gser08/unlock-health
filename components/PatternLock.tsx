@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, runOnJS } from 'react-native-reanimated';
-import Svg, { Line, Circle as SvgCircle } from 'react-native-svg';
+import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useAnimatedProps } from 'react-native-reanimated';
+import Svg, { Line } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 
 // Constants for layout
@@ -24,8 +24,30 @@ const NODES = Array.from({ length: 9 }).map((_, i) => {
 
 const HIT_SLOP = 35; // How close the finger needs to be to a node to snap to it
 
+// Base valid techniques according to oncology recommendations
+// We use stringified arrays for easy exact-matching comparison.
+const VALID_TECHNIQUES_ARRAYS = [
+  // Técnica Vertical (Cortacésped) - Barriendo de borde a borde y moviéndose de columna
+  [0,3,6,7,4,1,2,5,8], [6,3,0,1,4,7,8,5,2], [2,5,8,7,4,1,0,3,6], [8,5,2,1,4,7,6,3,0],
+  // Técnica Horizontal (Barrido de filas)
+  [0,1,2,5,4,3,6,7,8], [2,1,0,3,4,5,8,7,6], [6,7,8,5,4,3,0,1,2], [8,7,6,3,4,5,2,1,0],
+  // Técnica Espiral Reloj
+  [0,1,2,5,8,7,6,3,4], [2,5,8,7,6,3,0,1,4], [8,7,6,3,0,1,2,5,4], [6,3,0,1,2,5,8,7,4],
+  // Técnica Espiral Contra-Reloj
+  [0,3,6,7,8,5,2,1,4], [6,7,8,5,2,1,0,3,4], [8,5,2,1,0,3,6,7,4], [2,1,0,3,6,7,8,5,4],
+  // Técnica Radial estricta (De borde al pezón y rebote al borde opuesto)
+  [0,4,8], [8,4,0], [1,4,7], [7,4,1], [2,4,6], [6,4,2], [3,4,5], [5,4,3]
+];
+// Add reverses: e.g. Spiral starting from the center and going out
+const REVERSED_TECHNIQUES = VALID_TECHNIQUES_ARRAYS.map(arr => [...arr].reverse());
+const ALL_VALID_TECHNIQUES = [...VALID_TECHNIQUES_ARRAYS, ...REVERSED_TECHNIQUES].map(a => a.join(','));
+
+// GLOBALLY CREATE GRAPHICS COMPONENTS TO AVOID MEMORY LEAKS (The Crash Fix)
+const AnimatedLineComponent = Animated.createAnimatedComponent(Line);
+
 export default function PatternLock({ onSuccess }: { onSuccess?: () => void }) {
   const [activeNodes, setActiveNodes] = useState<number[]>([]);
+  const [strokeColor, setStrokeColor] = useState('rgba(255, 255, 255, 0.8)');
   const currentX = useSharedValue(-1);
   const currentY = useSharedValue(-1);
   const isInteracting = useSharedValue(false);
@@ -33,16 +55,36 @@ export default function PatternLock({ onSuccess }: { onSuccess?: () => void }) {
   // Helper to append node safely
   const appendNode = (id: number) => {
     setActiveNodes((prev) => {
+      // Don't append if it's already there
       if (!prev.includes(id)) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         return [...prev, id];
       }
       return prev;
     });
   };
 
+  const evaluatePattern = (nodes: number[]) => {
+    if (nodes.length < 3) {
+      // Too short to be anything
+      return false;
+    }
+
+    const pathString = nodes.join(',');
+    
+    // Check if the current path matches exactly any known technique
+    const isExactMatch = ALL_VALID_TECHNIQUES.includes(pathString);
+    
+    // We can also allow "Prefix" matching if we wanted to evaluate partials, 
+    // but the user's requirement is a strict oncology pattern drawn fully.
+    return isExactMatch;
+  };
+
   const gesture = Gesture.Pan()
     .onBegin((e) => {
+      // Reset color to white when starting a new gesture
+      runOnJS(setStrokeColor)('rgba(255, 255, 255, 0.8)');
+      
       isInteracting.value = true;
       currentX.value = e.x;
       currentY.value = e.y;
@@ -69,20 +111,30 @@ export default function PatternLock({ onSuccess }: { onSuccess?: () => void }) {
       currentY.value = -1;
       
       runOnJS((nodes: number[]) => {
-        // Validation: Medical pattern must trace at least 4 nodes and cover the center (areola)
-        const isValid = nodes.length >= 4 && nodes.includes(4);
+        // Only evaluate if they drew something
+        if (nodes.length === 0) return;
+
+        const isValid = evaluatePattern(nodes);
         
         if (isValid) {
+          // Exito Oncolo-educativo: Verde Brillante
+          setStrokeColor('rgba(60, 255, 80, 0.9)');
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          if (onSuccess) onSuccess();
+          if (onSuccess) {
+            // Give them time to see the green before the modal pops
+            setTimeout(onSuccess, 500); 
+          }
         } else {
+          // Error en el examen: Rojo Peligro
+          setStrokeColor('rgba(255, 60, 60, 0.9)');
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
 
-        // Clear pattern after a short delay
+        // Clear pattern after a visual delay
         setTimeout(() => {
           setActiveNodes([]);
-        }, isValid ? 1500 : 800);
+          setStrokeColor('rgba(255, 255, 255, 0.8)');
+        }, isValid ? 1500 : 1000);
       })(activeNodes);
     });
 
@@ -93,6 +145,7 @@ export default function PatternLock({ onSuccess }: { onSuccess?: () => void }) {
           <View style={styles.gridContainer}>
             {/* Draw active lines using SVG */}
             <Svg height={GRID_SIZE} width={GRID_SIZE} style={StyleSheet.absoluteFill}>
+              {/* Static lines for locked segments */}
               {activeNodes.map((id, index) => {
                 if (index === 0) return null;
                 const prevNode = NODES[activeNodes[index - 1]];
@@ -104,20 +157,21 @@ export default function PatternLock({ onSuccess }: { onSuccess?: () => void }) {
                     y1={prevNode.y}
                     x2={currNode.x}
                     y2={currNode.y}
-                    stroke="rgba(255, 255, 255, 0.8)"
-                    strokeWidth="6"
+                    stroke={strokeColor}
+                    strokeWidth="8"
                     strokeLinecap="round"
                   />
                 );
               })}
               
-              {/* Dynamic line following the finger */}
+              {/* Dynamic line following the finger while dragging */}
               {activeNodes.length > 0 && isInteracting.value && currentX.value !== -1 && (
-                <AnimatedLine
+                <ActiveAnimatedLine
                   x1={NODES[activeNodes[activeNodes.length - 1]].x}
                   y1={NODES[activeNodes[activeNodes.length - 1]].y}
                   currentX={currentX}
                   currentY={currentY}
+                  color={strokeColor}
                 />
               )}
             </Svg>
@@ -140,7 +194,7 @@ export default function PatternLock({ onSuccess }: { onSuccess?: () => void }) {
                   {isCenter && (
                     <View style={styles.nipple} />
                   )}
-                  {isActive && !isCenter && <View style={styles.innerDot} />}
+                  {isActive && !isCenter && <View style={[styles.innerDot, { backgroundColor: strokeColor === 'rgba(255, 255, 255, 0.8)' ? 'white' : strokeColor }]} />}
                 </View>
               );
             })}
@@ -151,26 +205,8 @@ export default function PatternLock({ onSuccess }: { onSuccess?: () => void }) {
   );
 }
 
-// Custom animated line component
-const AnimatedLine = ({ x1, y1, currentX, currentY }: any) => {
-  const animatedProps = useAnimatedStyle(() => ({
-    // Setting these implicitly via useAnimatedProps is more robust, but SVG Line animated props are tricky.
-    // We can simulate an animated line using absolute positioned rotated View instead for simplicity,
-    // or use createAnimatedComponent on Line. 
-  }));
-
-  // A pure Reanimated 3 workaround for animated SVG line:
-  const AnimatedSVGLine = Animated.createAnimatedComponent(Line);
-  
-  // Actually, animating SVGs directly via props requires `useAnimatedProps`.
-  return (
-    <ActiveAnimatedLine x1={x1} y1={y1} currentX={currentX} currentY={currentY} />
-  );
-};
-
-import { useAnimatedProps } from 'react-native-reanimated';
-const ActiveAnimatedLine = ({ x1, y1, currentX, currentY }: any) => {
-  const AnimatedLineComponent = Animated.createAnimatedComponent(Line);
+// Subcomponent for the dynamic line to encapsulate the useAnimatedProps cleanly
+const ActiveAnimatedLine = ({ x1, y1, currentX, currentY, color }: any) => {
   const animatedProps = useAnimatedProps(() => {
     return {
       x2: currentX.value,
@@ -183,13 +219,13 @@ const ActiveAnimatedLine = ({ x1, y1, currentX, currentY }: any) => {
       x1={x1}
       y1={y1}
       animatedProps={animatedProps}
-      stroke="rgba(255,255,255,0.5)"
-      strokeWidth="6"
+      // @ts-ignore (Reanimated props mapping)
+      stroke={color}
+      strokeWidth="8"
       strokeLinecap="round"
     />
   );
 };
-
 
 const styles = StyleSheet.create({
   container: {
@@ -217,9 +253,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
   innerDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: 'white',
   },
   // The center node (anatomical representation)
