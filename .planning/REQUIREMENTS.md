@@ -2,31 +2,27 @@
 
 ## v1 Requirements
 
-### Authentication & Profiles (AUTH)
-- [ ] **AUTH-01**: La app se puede usar sin crear una cuenta (fricción cero).
-- [ ] **AUTH-02**: Usuario puede configurar un alias, su fecha de nacimiento y ciclo para la programación de recordatorios.
-
 ### Core Experience (UX)
-- [ ] **CORE-01**: Interfaz primaria con estética de Lock Screen (9 nodos conectables).
-- [ ] **CORE-02**: La pantalla principal debe verse similar a las imágenes provistas (color rosa claro de fondo, puntos translúcidos y botón de "aprender patrón").
+- [ ] **CORE-01**: Interfaz primaria con estética de Lock Screen (9 nodos) con branding de Fundayuda.
+- [ ] **CORE-02**: Background color rosa sólido/gradiente, puntos translúcidos estilo UI nativa.
 
 ### Educational Engine (EDU)
-- [ ] **EDU-01**: Sistema rastrea el gesto del usuario sobre el canvas de 9 puntos en tiempo real.
-- [ ] **EDU-02**: El sistema despliega un patrón animado a seguir (ej: Radial, Espiral o Vertical).
-- [ ] **EDU-03**: Validación estricta del orden: el trazo del usuario debe coincidir con el orden educativo de puntos.
-- [ ] **EDU-04**: El sistema emite feedback de vibración (haptics) al pasar por cada nodo correcto.
-- [ ] **EDU-05**: El sistema emite feedback visual (glow/glow en rojo) al terminar correcta/incorrectamente.
+- [ ] **EDU-01**: Sistema rastrea de manera fluida el dedo sobre el canvas 3x3.
+- [ ] **EDU-02**: Validación estricta de 3 patrones médicos (Circular, Radial, Vertical).
+- [ ] **EDU-03**: Emisión de feedback háptico (vibración) y visual al cruzar puntos.
+
+### Donation & Monetization (DON)
+- [ ] **DON-01**: Pantalla de éxito heroica: "¡Logrado! Sponsor X acaba de donar $0.05 por tu aprendizaje."
+- [ ] **DON-02**: (Anti-Bot) Límite de donación comercial a 1 vez al mes por Device ID.
+- [ ] **DON-03**: Backend API simple que incremente el contador global ("15,200 mujeres donaron hoy").
 
 ### Reminders (REM)
-- [ ] **REM-01**: La app puede agendar notificaciones locales mensuales para recordar el autoexamen.
+- [ ] **REM-01**: La app agenda push notifications mensuales de manera local invitando a la usuaria a "desbloquear" su donación solidaria.
 
 ## v2 Requirements (Deferred)
-- Gamificación (rachas, "streak" de meses consecutivos).
-- Integración con HealthKit / Google Fit.
+- Widget interactivo para pantalla de inicio.
+- Pacto social (vincular familiares y notificarles cuando completaste tu examen).
 
 ## Out of Scope
-- Reemplazo real del Lock Screen nativo de dispositivos OS. Se implementará como App independiente.
-- Funciones de telediagnóstico (No es una app médica).
-
-## Traceability
-*(To be populated by Roadmap)*
+- Calendario menstrual o perfiles médicos (100% privacidad/fricción cero).
+- Intervención de la pantalla de bloqueo real del sistema operativo.

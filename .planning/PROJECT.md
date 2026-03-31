@@ -3,17 +3,18 @@
 ## Context
 
 **What This Is:**  
-Unlock Health es una App móvil educativa (Android, iOS) que convierte la mecánica de los patrones de bloqueo (puntos unidos por líneas) en una herramienta para enseñar los movimientos del autoexamen de seno. El propósito es prevenir el cáncer de mama al aprovechar una acción cotidiana (trazar un patrón) para interiorizar y educar a las usuarias sobre los diferentes tipos de palpación (circular, radial, vertical).
+Unlock Health es una App móvil educativa (Android, iOS) con estética de pantalla de bloqueo ("Pattern Lock") que enseña los movimientos del autoexamen de seno. 
 
 **The Problem:**  
-El cáncer de mama es una de las principales causas de muerte en mujeres, en gran parte debido a la falta de educación sobre cómo y cuándo realizarse el autoexamen para la detección temprana. 
+El cáncer de mama es una de las principales causas de muerte en mujeres por falta de educación preventiva. Además, las usuarias sufren de fatiga de aplicaciones: no quieren otra app médica compleja ni otro calendario menstrual.
 
-**Core Value:**  
-Educación preventiva interactiva, hermosa y memorable: "El mismo patrón que abre tu celular puede salvar tu vida." Las personas agregan una "capa de seguridad extra" a sus vidas.
+**Core Value & Hook (Opción B: Impacto Social):**  
+"Aprende el patrón y salva dos vidas". La aplicación se basa en el micro-voluntariado. Las usuarias trazan el patrón en su celular 1 vez al mes. Si lo hacen correctamente, interiorizan el autoexamen, y una marca patrocinadora dona $0.05 a la fundación Fundayuda. 
+No hay tracking médico, no hay necesidad de ingresar fechas sensibles; es una app higiénica de impacto social directo y cero fricción.
 
 **Key Constraints & Realities:**  
-- **Limitaciones del OS:** Reemplazar genuinamente la pantalla de bloqueo *nativa* del sistema operativo (Lock Screen real) es técnicamente inviable o prohibido tanto en iOS como en las versiones modernas de Android (por motivos de seguridad).
-- **Abordaje Pragmático:** La solución más realista y mantenible será una App standalone de uso frecuente, potencialmente apalancada por notificaciones ricas (Rich Notifications), widgets o alarmas mensuales que invitan a la usuaria a "desbloquear" su examen de salud del mes introduciendo un patrón específico. Alternativamente, puede existir un vault privado o diario en la app que requiere este patrón educativo para abrirse.
+- **OS Limits:** Modificar el Lock Screen real del teléfono es inviable. La app es standalone y se apoya en Push Notifications locales para llamar a la usuaria.
+- **Anti-Bot Farming:** Al haber dinero involucrado por patrocinadores (donaciones por patrón), el sistema limitará la "donación desbloqueada" a **1 vez por mes, por dispositivo** (usando Device ID nativo anónimo). Se puede practicar mil veces, pero solo dona una vez.
 
 ## Requirements
 
@@ -23,23 +24,16 @@ Educación preventiva interactiva, hermosa y memorable: "El mismo patrón que ab
 
 ### Active
 
-- [ ] Usuarios son introducidos al concepto de "patrón de bloqueo como autoexamen" (Onboarding interactivo).
-- [ ] La interfaz primaria replica estéticamente la elegancia de una pantalla de bloqueo con 9 puntos (Lock Screen).
-- [ ] Soporte para distintos tipos de patrones que enseñan los 3 movimientos principales del autoexamen de mama (espiral, líneas verticales, líneas cuña/radiales).
-- [ ] Refuerzo positivo visual y retroalimentación háptica tras trazar el patrón correctamente.
-- [ ] Programación o recordatorio mensual inteligente ("Es hora de desbloquear tu seguridad", basado en la fecha ideal del ciclo menstrual).
+- [ ] REQ-UI-01: Interfaz primaria con estética de Lock Screen (9 nodos conectables) con el branding de Fundayuda.
+- [ ] REQ-EDU-01: Sistema rastrea 3 patrones educativos principales (espiral, radial, vertical).
+- [ ] REQ-DON-01: Al completar exitosamente el patrón, se muestra el Brand Takeover (Ej: "Logrado. Patrocinador X dona 5 centavos.").
+- [ ] REQ-SEC-01: Lógica de Cap Anti-Bot: Permite prácticas infinitas, pero registra la API de donación 1 vez por mes por Device ID / Token.
+- [ ] REQ-REM-01: Autoprogramación de un recordatorio inteligente local "Desbloquea una donación hoy" cada 30 días.
 
 ### Out of Scope
 
-- Reemplazar la pantalla de bloqueo nativa del sistema telefónico (Device Lock Screen) — Restricción técnica de iOS/Android.
-- Diagnóstico automatizado de la salud de la usuaria — Es una herramienta educativa, no médica.
-
-## Key Decisions
-
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| **Enfoque de App Educativa / Vault Personal** | Los OS Móviles bloquean la alteración de la pantalla de bloqueo. Una app que protege información personal o sirve de diario usando un patrón educativo como "desbloqueo" permite simular la experiencia sin romper las reglas de Apple/Google. | — Pending |
-| **Framework Multi-Plataforma** | Para abarcar Android e iOS desde el día 1, se optará por un framework como React Native o Expo. | — Pending |
+- Seguimiento del ciclo menstrual médico / Fertilidad.
+- Alteración de la pantalla de bloqueo (Hardware lock) de iOS/Android.
 
 ---
-*Last updated: 2026-03-30 after initialization*
+*Last updated: 2026-03-30 after pivot to Social Impact / Sponsored.*

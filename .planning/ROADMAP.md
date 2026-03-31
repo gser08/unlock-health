@@ -4,11 +4,10 @@
 
 | # | Phase | Goal | Requirements | Criteria |
 |---|-------|------|--------------|----------|
-| 1 | **Foundation & UI Shell** | Configurar el proyecto Expo/React Native y armar la UI básica con colores/sombras según los bocetos. | CORE-01, CORE-02 | 3 |
-| 2 | **Pattern Component Core** | Implementar la lógica del Canvas de 9 puntos (gestos en pantalla) capaz de conectarse sin validación médica. | EDU-01, EDU-04, EDU-05 | 4 |
-| 3 | **Educative Patterns API** | Mapear los trazos médicos (Radial, Circular, Vertical) a arrays de coordenadas del canvas 3x3 y hacer la validación paso a paso. | EDU-02, EDU-03 | 2 |
-| 4 | **Onboarding & Configuration** | Flujo para configurar alias y la periodicidad del examen mensual, terminando en la pantalla principal. | AUTH-01, AUTH-02 | 3 |
-| 5 | **Reminders System** | Implementar Push Notifications locales con expo-notifications agendadas mensualmente. | REM-01 | 2 |
+| 1 | **Foundation & UI Shell** | Configurar el proyecto Expo/React Native y armar la UI básica con colores/sombras según los bocetos de Fundayuda. | CORE-01, CORE-02 | 3 |
+| 2 | **Pattern Component Core** | Implementar la lógica del Canvas de 9 puntos (gestos en pantalla) con validación médica (Círculos, Líneas). | EDU-01, EDU-02, EDU-03 | 4 |
+| 3 | **Brand Takeover & Donaciones** | Integrar las pantallas heroicas de éxito patrocinadas y enforzar el Límite Anti-Bot localmente (Device ID). | DON-01, DON-02, DON-03 | 3 |
+| 4 | **Reminders System** | Implementar Push Notifications locales agendadas 1x al mes (cero data médica guardada en backend). | REM-01 | 2 |
 
 ---
 
@@ -18,42 +17,32 @@
 **Goal**: Tener la App corriendo en simulador/dispositivo con el theme rosado estético ("Fundayuda" branding).
 **Requirements**: CORE-01, CORE-02
 **Success criteria**:
-1. App hace un render de un header y un grid placeholder.
-2. Los assets (tipografía, colores `#F494B7` aprox) están configurados.
-3. Se despliega una vista en iOS y Android idéntica.
+1. App renderiza un layout placeholder para el lock screen.
+2. Los assets (colores `#F494B7` aprox) están configurados en theme base.
+3. Se despliega una vista en iOS y Android idéntica y responsive.
 **UI hint**: yes
 
 ### Phase 2: Pattern Component Core
-**Goal**: Motor de "Pattern Lock" que detecte trazos de dedo cruzando nodos.
-**Requirements**: EDU-01, EDU-04, EDU-05
+**Goal**: Motor de "Pattern Lock" que detecte trazos de dedo cruzando nodos con feedback positivo.
+**Requirements**: EDU-01, EDU-02, EDU-03
 **Success criteria**:
-1. PanGestureHandler dibuja una línea siguiendo al dedo sobre un SVG o canvas.
-2. Al tocar o pasar sobre uno de los 9 nodos predefinidos, la línea hace un 'snap' al punto.
-3. El teléfono vibra suavemente al "snap" (haptic feedback).
-4. El teléfono muestra una animación luminosa (glow) en caso de éxito/error genérico.
+1. Al tocar o pasar sobre uno de los 9 nodos predefinidos, la línea se une (snap).
+2. Vibración suave al "snap" (haptic feedback).
+3. Lógica rígida para evaluar contra un patrón correcto y emitir error/color verde (brillo blanquecino según tu mockup).
 **UI hint**: yes
 
-### Phase 3: Educative Patterns API
-**Goal**: Lógica rígida para educar los movimientos contra un patrón correcto ("Secreto").
-**Requirements**: EDU-02, EDU-03
+### Phase 3: Brand Takeover & Donaciones
+**Goal**: Flujo principal. Alguien dibuja bien y la fundación celebra junto a la marca.
+**Requirements**: DON-01, DON-02, DON-03
 **Success criteria**:
-1. La UI presenta una animación sutil para mostrar el trazo correcto a realizar (ej: `1 -> 2 -> 3 -> 6 -> 9 -> 8 -> 7 -> 4 -> 5` que sería una espiral o cuña).
-2. Si el usuario traza otra cosa, la línea se limpia con un shake rojo. Si se dibuja el patrón, se pone resplandeciente blanco/verde.
+1. Pantalla de celebración "Has completado tu revisión. Marca X dona 5¢".
+2. Se usa `expo-application` o `expo-device` para obtener Android ID / IdentifierForVendor.
+3. El conteo de intentos se congela para que los bots/grinders no hagan 10k donaciones falsas. Si se vuelve a intentar ese mes, sale el mensaje: "¡Sigues mejorando! Tu donación mensual ya fue registrada, vuelve el mes que viene".
 **UI hint**: yes
 
-### Phase 4: Onboarding & Configuration
-**Goal**: Experiencia para nuevos usuarios que explique la causa preventiva de la App y solicite la configuración del ciclo menstrual.
-**Requirements**: AUTH-01, AUTH-02
-**Success criteria**:
-1. Las pantallas de tutorial narran y presentan la misión "Tu celular guarda un patrón que podría salvar tu vida".
-2. Posibilidad opcional de registrar qué fecha suele llegar el periodo.
-3. Se guardan las preferencias con `async-storage`.
-**UI hint**: no
-
-### Phase 5: Reminders System
-**Goal**: Motor de recordatorio mensual.
+### Phase 4: Reminders System
+**Goal**: El trigger asíncrono.
 **Requirements**: REM-01
 **Success criteria**:
-1. Permisos locales de Push Notification solicitados.
-2. Se agenda silenciosamente un "Triger mensual" asumiendo 7-10 días ideal post-menstruación, o recordatorio generico de "Revisión 1 vez al mes" ("Es tu momento UnlockHealth").
+1. Permisos de notificaciones habilitados y agendados dentro de 30 días post-primer intento.
 **UI hint**: no
