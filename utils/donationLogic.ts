@@ -13,8 +13,8 @@ const OCTOBER_BRANDS = [
 ];
 
 export const isOctober = () => {
-  const currentMonth = new Date().getMonth();
-  return currentMonth === 9; // 0-indexed, so 9 is October
+  // DEV OVERRIDE: Always pretend it's October for testing
+  return true; 
 };
 
 export const getBrandForToday = () => {
@@ -32,22 +32,8 @@ export const getDeviceId = async () => {
 };
 
 export const checkCanDonateToday = async (): Promise<boolean> => {
-  if (!isOctober()) {
-    // For V1, the app only does donations in October
-    return false;
-  }
-  
-  try {
-    const lastDonationDateString = await AsyncStorage.getItem(DONATION_KEY);
-    if (!lastDonationDateString) return true;
-
-    const todayString = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
-    return lastDonationDateString !== todayString;
-    
-  } catch (e) {
-    console.error("Failed to read donation status", e);
-    return false;
-  }
+  // DEV OVERRIDE: Disable capping so the user can donate infinitely during testing
+  return true;
 };
 
 export const registerDonation = async (): Promise<boolean> => {

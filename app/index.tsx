@@ -1,13 +1,36 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, StatusBar, Modal, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  StatusBar,
+  Modal,
+  TouchableOpacity,
+  ScrollView,
+  Animated as RNAnimated,
+  Dimensions,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import PatternLock from '../components/PatternLock';
 import { checkCanDonateToday, registerDonation, getBrandForToday } from '../utils/donationLogic';
+import { TECHNIQUES, getTechniqueForToday, Technique } from '../utils/techniques';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function IndexScreen() {
   const [showTakeover, setShowTakeover] = useState(false);
-  const [brandName, setBrandName] = useState("Solidarity Partner");
+  const [brandName, setBrandName] = useState('Solidarity Partner');
   const [canDonate, setCanDonate] = useState(false);
   const [alreadyDonated, setAlreadyDonated] = useState(false);
+  const [matchedTechnique, setMatchedTechnique] = useState<Technique | null>(null);
+
+  // Cycle through techniques — user can tap to switch
+  const [currentTechIndex, setCurrentTechIndex] = useState(0);
+  const currentTechnique = TECHNIQUES[currentTechIndex];
+
+  // Animations
+  const fadeAnim = useRef(new RNAnimated.Value(0)).current;
+  const slideAnim = useRef(new RNAnimated.Value(30)).current;
 
   useEffect(() => {
     async function initCheck() {
@@ -16,63 +39,162 @@ export default function IndexScreen() {
       setBrandName(getBrandForToday());
     }
     initCheck();
-  }, [showTakeover]); // Re-check when modal closes
 
-  const handlePatternSuccess = async () => {
+    // Entrance animation
+    RNAnimated.parallel([
+      RNAnimated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+      RNAnimated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  const handlePatternSuccess = async (technique: Technique) => {
+    setMatchedTechnique(technique);
     if (canDonate) {
-      const success = await registerDonation();
-      if (success) {
-        setAlreadyDonated(false);
-        setShowTakeover(true);
-      }
+      await registerDonation();
+      setAlreadyDonated(false);
     } else {
-      // User already donated today (or it's not October)
       setAlreadyDonated(true);
-      setShowTakeover(true);
     }
+    setShowTakeover(true);
+  };
+
+  const cycleTechnique = () => {
+    setCurrentTechIndex((prev) => (prev + 1) % TECHNIQUES.length);
+  };
+
+  const closeModal = async () => {
+    setShowTakeover(false);
+    const allowed = await checkCanDonateToday();
+    setCanDonate(allowed);
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#F494B7" />
-      <View style={styles.header}>
-        <Text style={styles.headerText}>fundayuda</Text>
-      </View>
-      
-      <View style={styles.mainContent}>
-        <Text style={styles.instructionText}>
-          El mismo patrón que abre tu celular puede salvar tu vida.
-        </Text>
-        
-        <PatternLock onSuccess={handlePatternSuccess} />
-      </View>
-
-      <Modal
-        visible={showTakeover}
-        animationType="slide"
-        presentationStyle="pageSheet"
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <LinearGradient
+        colors={['#1a0a1e', '#2d1035', '#4a1942', '#6b2055']}
+        style={styles.gradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
       >
-        <View style={styles.modalContainer}>
-          <Text style={styles.modalTitle}>
-            {alreadyDonated ? "¡Sigues mejorando!" : "¡Logrado!"}
-          </Text>
-          
-          <Text style={styles.modalText}>
-            {alreadyDonated 
-              ? "Tu donación de hoy ya fue registrada, pero la práctica hace al maestro. Vuelve mañana para desbloquear otra donación."
-              : `¡Gracias por cuidar tu salud! Cientos de mujeres te lo agradecen. Hoy, nuestro patrocinador solidario:`}
-          </Text>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          <RNAnimated.View style={[styles.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            <Text style={styles.ribbon}>🎀</Text>
+            <Text style={styles.headerTitle}>Unlock Health</Text>
+            <Text style={styles.headerSubtitle}>Tu autoexamen diario, un gesto que salva vidas</Text>
+          </RNAnimated.View>
 
-          {!alreadyDonated && (
-            <View style={styles.brandBox}>
-              <Text style={styles.brandText}>{brandName}</Text>
-              <Text style={styles.donatedText}>ha donado $0.05 a Fundayuda</Text>
-            </View>
-          )}
+          {/* Technique Card */}
+          <RNAnimated.View style={[styles.techniqueCard, { opacity: fadeAnim }]}>
+            <TouchableOpacity onPress={cycleTechnique} activeOpacity={0.8}>
+              <View style={styles.techniqueHeader}>
+                <Text style={styles.techniqueEmoji}>{currentTechnique.emoji}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.techniqueName}>Técnica {currentTechnique.name}</Text>
+                  <Text style={styles.techniqueNameEn}>{currentTechnique.nameEn}</Text>
+                </View>
+                <View style={styles.techBadge}>
+                  <Text style={styles.techBadgeText}>{currentTechIndex + 1}/{TECHNIQUES.length}</Text>
+                </View>
+              </View>
+              <Text style={styles.techniqueDesc}>{currentTechnique.description}</Text>
+              <View style={styles.tipContainer}>
+                <Text style={styles.tipIcon}>💡</Text>
+                <Text style={styles.tipText}>{currentTechnique.tip}</Text>
+              </View>
+              <Text style={styles.tapHint}>Toca para ver otra técnica →</Text>
+            </TouchableOpacity>
+          </RNAnimated.View>
 
-          <TouchableOpacity style={styles.button} onPress={() => setShowTakeover(false)}>
-            <Text style={styles.buttonText}>Aceptar</Text>
-          </TouchableOpacity>
+          {/* Pattern Lock */}
+          <View style={styles.patternContainer}>
+            <PatternLock
+              onSuccess={handlePatternSuccess}
+              guidePath={currentTechnique.guidePath}
+            />
+          </View>
+
+          {/* Instructions */}
+          <View style={styles.instructionBar}>
+            <Text style={styles.instructionText}>
+              Sigue las líneas punteadas para aprender la técnica
+            </Text>
+          </View>
+
+          {/* Footer branding */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Una iniciativa de <Text style={styles.footerBrand}>Fundayuda</Text></Text>
+            <Text style={styles.footerSub}>Octubre es el mes de la concientización 🎀</Text>
+          </View>
+        </ScrollView>
+      </LinearGradient>
+
+      {/* Success Modal */}
+      <Modal visible={showTakeover} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {/* Confetti-like accent */}
+            <LinearGradient
+              colors={alreadyDonated ? ['#667eea', '#764ba2'] : ['#f093fb', '#f5576c']}
+              style={styles.modalAccent}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={styles.modalAccentEmoji}>
+                {alreadyDonated ? '💪' : '🎉'}
+              </Text>
+            </LinearGradient>
+
+            <Text style={styles.modalTitle}>
+              {alreadyDonated ? '¡Sigues mejorando!' : '¡Donación Desbloqueada!'}
+            </Text>
+
+            {matchedTechnique && (
+              <View style={styles.matchedBadge}>
+                <Text style={styles.matchedBadgeText}>
+                  {matchedTechnique.emoji} Técnica {matchedTechnique.name}
+                </Text>
+              </View>
+            )}
+
+            <Text style={styles.modalText}>
+              {alreadyDonated
+                ? 'Tu donación de hoy ya fue registrada. La práctica constante es clave para detectar cambios a tiempo. ¡Vuelve mañana!'
+                : `Has completado correctamente un patrón de autoexamen. Gracias a ti, nuestro patrocinador solidario de hoy:`}
+            </Text>
+
+            {!alreadyDonated && (
+              <View style={styles.brandContainer}>
+                <LinearGradient
+                  colors={['#ffecd2', '#fcb69f']}
+                  style={styles.brandGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Text style={styles.brandText}>{brandName}</Text>
+                  <Text style={styles.donatedAmount}>ha donado $0.05</Text>
+                  <Text style={styles.donatedTo}>a Fundayuda 🎀</Text>
+                </LinearGradient>
+              </View>
+            )}
+
+            <TouchableOpacity style={styles.modalButton} onPress={closeModal} activeOpacity={0.85}>
+              <LinearGradient
+                colors={['#f093fb', '#f5576c']}
+                style={styles.buttonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={styles.buttonText}>
+                  {alreadyDonated ? 'Seguir Practicando' : 'Continuar'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
     </View>
@@ -80,85 +202,255 @@ export default function IndexScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: '#F494B7',
   },
+  gradient: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingTop: 60,
+    paddingBottom: 40,
+    alignItems: 'center',
+  },
+
+  // Header
   header: {
-    marginTop: 60,
     alignItems: 'center',
-  },
-  headerText: {
-    color: 'white',
-    fontSize: 32,
-    fontWeight: 'bold',
-    letterSpacing: 1,
-  },
-  mainContent: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 24,
     paddingHorizontal: 20,
   },
-  instructionText: {
-    color: 'white',
-    fontSize: 20,
-    textAlign: 'center',
-    marginBottom: 60,
-    fontWeight: '500',
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'white',
-    padding: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#F494B7',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  modalText: {
-    fontSize: 18,
-    color: '#333',
-    textAlign: 'center',
-    lineHeight: 26,
-    marginBottom: 40,
-  },
-  brandBox: {
-    padding: 20,
-    backgroundColor: '#f8f8f8',
-    borderRadius: 16,
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 40,
-    borderWidth: 1,
-    borderColor: '#eee',
-  },
-  brandText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+  ribbon: {
+    fontSize: 40,
     marginBottom: 8,
   },
-  donatedText: {
-    fontSize: 16,
-    color: '#666',
+  headerTitle: {
+    color: 'white',
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
-  button: {
-    backgroundColor: '#F494B7',
-    paddingVertical: 15,
-    paddingHorizontal: 40,
-    borderRadius: 30,
+  headerSubtitle: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 14,
+    marginTop: 6,
+    textAlign: 'center',
+    fontWeight: '400',
+  },
+
+  // Technique Card
+  techniqueCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 20,
+    padding: 20,
+    marginHorizontal: 20,
+    marginBottom: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    width: SCREEN_WIDTH - 40,
+  },
+  techniqueHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
+  },
+  techniqueEmoji: {
+    fontSize: 32,
+  },
+  techniqueName: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  techniqueNameEn: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  techBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  techBadgeText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  techniqueDesc: {
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 14,
+  },
+  tipContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255, 200, 50, 0.08)',
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 200, 50, 0.15)',
+  },
+  tipIcon: {
+    fontSize: 16,
+  },
+  tipText: {
+    color: 'rgba(255, 220, 100, 0.9)',
+    fontSize: 13,
+    flex: 1,
+    lineHeight: 19,
+  },
+  tapHint: {
+    color: 'rgba(255, 255, 255, 0.3)',
+    fontSize: 11,
+    textAlign: 'right',
+    marginTop: 10,
+  },
+
+  // Pattern Area
+  patternContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+
+  // Instructions
+  instructionBar: {
+    paddingHorizontal: 30,
+    marginBottom: 30,
+  },
+  instructionText: {
+    color: 'rgba(255, 255, 255, 0.35)',
+    fontSize: 13,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+
+  // Footer
+  footer: {
+    alignItems: 'center',
+    paddingTop: 10,
+  },
+  footerText: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontSize: 13,
+  },
+  footerBrand: {
+    color: '#f093fb',
+    fontWeight: '700',
+  },
+  footerSub: {
+    color: 'rgba(255, 255, 255, 0.25)',
+    fontSize: 11,
+    marginTop: 4,
+  },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#1e1028',
+    borderRadius: 28,
+    padding: 28,
     width: '100%',
+    maxWidth: 380,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    shadowColor: '#f093fb',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 30,
+    elevation: 20,
+  },
+  modalAccent: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  modalAccentEmoji: {
+    fontSize: 36,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: 'white',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  matchedBadge: {
+    backgroundColor: 'rgba(74, 230, 138, 0.12)',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(74, 230, 138, 0.25)',
+  },
+  matchedBadgeText: {
+    color: '#4AE68A',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalText: {
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.65)',
+    textAlign: 'center',
+    lineHeight: 23,
+    marginBottom: 24,
+  },
+  brandContainer: {
+    width: '100%',
+    marginBottom: 24,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  brandGradient: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  brandText: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#333',
+    marginBottom: 4,
+  },
+  donatedAmount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#555',
+  },
+  donatedTo: {
+    fontSize: 14,
+    color: '#777',
+    marginTop: 2,
+  },
+  modalButton: {
+    width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  buttonGradient: {
+    paddingVertical: 16,
+    alignItems: 'center',
   },
   buttonText: {
     color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  }
+    fontSize: 17,
+    fontWeight: '700',
+  },
 });

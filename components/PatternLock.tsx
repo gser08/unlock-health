@@ -1,13 +1,22 @@
-import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Dimensions } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, runOnJS, useAnimatedProps } from 'react-native-reanimated';
-import Svg, { Line } from 'react-native-svg';
+import Animated, {
+  useSharedValue,
+  useAnimatedProps,
+  runOnJS,
+  withTiming,
+  withRepeat,
+  withSequence,
+  useAnimatedStyle,
+} from 'react-native-reanimated';
+import Svg, { Line, Circle as SvgCircle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
+import { Technique, validateAnyTechnique } from '../utils/techniques';
 
 // Constants for layout
-const GRID_SIZE = 300;
-const NODE_SIZE = 60;
+const GRID_SIZE = 280;
+const NODE_SIZE = 54;
 const NODE_RADIUS = NODE_SIZE / 2;
 const SPACING = (GRID_SIZE - 3 * NODE_SIZE) / 2;
 
@@ -22,40 +31,58 @@ const NODES = Array.from({ length: 9 }).map((_, i) => {
   };
 });
 
-const HIT_SLOP = 35; // How close the finger needs to be to a node to snap to it
+const HIT_SLOP = 38;
 
-// Base valid techniques according to oncology recommendations
-// We use stringified arrays for easy exact-matching comparison.
-const VALID_TECHNIQUES_ARRAYS = [
-  // Técnica Vertical (Cortacésped) - Barriendo de borde a borde y moviéndose de columna
-  [0,3,6,7,4,1,2,5,8], [6,3,0,1,4,7,8,5,2], [2,5,8,7,4,1,0,3,6], [8,5,2,1,4,7,6,3,0],
-  // Técnica Horizontal (Barrido de filas)
-  [0,1,2,5,4,3,6,7,8], [2,1,0,3,4,5,8,7,6], [6,7,8,5,4,3,0,1,2], [8,7,6,3,4,5,2,1,0],
-  // Técnica Espiral Reloj
-  [0,1,2,5,8,7,6,3,4], [2,5,8,7,6,3,0,1,4], [8,7,6,3,0,1,2,5,4], [6,3,0,1,2,5,8,7,4],
-  // Técnica Espiral Contra-Reloj
-  [0,3,6,7,8,5,2,1,4], [6,7,8,5,2,1,0,3,4], [8,5,2,1,0,3,6,7,4], [2,1,0,3,6,7,8,5,4],
-  // Técnica Radial estricta (De borde al pezón y rebote al borde opuesto)
-  [0,4,8], [8,4,0], [1,4,7], [7,4,1], [2,4,6], [6,4,2], [3,4,5], [5,4,3]
-];
-// Add reverses: e.g. Spiral starting from the center and going out
-const REVERSED_TECHNIQUES = VALID_TECHNIQUES_ARRAYS.map(arr => [...arr].reverse());
-const ALL_VALID_TECHNIQUES = [...VALID_TECHNIQUES_ARRAYS, ...REVERSED_TECHNIQUES].map(a => a.join(','));
-
-// GLOBALLY CREATE GRAPHICS COMPONENTS TO AVOID MEMORY LEAKS (The Crash Fix)
+// Create animated component ONCE at module level (crash fix)
 const AnimatedLineComponent = Animated.createAnimatedComponent(Line);
+const AnimatedCircle = Animated.createAnimatedComponent(SvgCircle);
 
-export default function PatternLock({ onSuccess }: { onSuccess?: () => void }) {
+type PatternResult = 'idle' | 'success' | 'error';
+
+interface PatternLockProps {
+  onSuccess?: (technique: Technique) => void;
+  guidePath?: number[]; // Ghost guide to show the user which pattern to draw
+}
+
+export default function PatternLock({ onSuccess, guidePath }: PatternLockProps) {
   const [activeNodes, setActiveNodes] = useState<number[]>([]);
-  const [strokeColor, setStrokeColor] = useState('rgba(255, 255, 255, 0.8)');
+  const [result, setResult] = useState<PatternResult>('idle');
   const currentX = useSharedValue(-1);
   const currentY = useSharedValue(-1);
   const isInteracting = useSharedValue(false);
 
-  // Helper to append node safely
+  // Pulse animation for the guide dots
+  const guideOpacity = useSharedValue(0.15);
+
+  useEffect(() => {
+    guideOpacity.value = withRepeat(
+      withSequence(
+        withTiming(0.45, { duration: 1200 }),
+        withTiming(0.15, { duration: 1200 })
+      ),
+      -1,
+      true
+    );
+  }, []);
+
+  const getStrokeColor = () => {
+    switch (result) {
+      case 'success': return '#4AE68A';
+      case 'error': return '#FF6B6B';
+      default: return 'rgba(255, 255, 255, 0.85)';
+    }
+  };
+
+  const getNodeGlowColor = () => {
+    switch (result) {
+      case 'success': return 'rgba(74, 230, 138, 0.5)';
+      case 'error': return 'rgba(255, 107, 107, 0.5)';
+      default: return 'rgba(255, 255, 255, 0.35)';
+    }
+  };
+
   const appendNode = (id: number) => {
     setActiveNodes((prev) => {
-      // Don't append if it's already there
       if (!prev.includes(id)) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         return [...prev, id];
@@ -64,31 +91,13 @@ export default function PatternLock({ onSuccess }: { onSuccess?: () => void }) {
     });
   };
 
-  const evaluatePattern = (nodes: number[]) => {
-    if (nodes.length < 3) {
-      // Too short to be anything
-      return false;
-    }
-
-    const pathString = nodes.join(',');
-    
-    // Check if the current path matches exactly any known technique
-    const isExactMatch = ALL_VALID_TECHNIQUES.includes(pathString);
-    
-    // We can also allow "Prefix" matching if we wanted to evaluate partials, 
-    // but the user's requirement is a strict oncology pattern drawn fully.
-    return isExactMatch;
-  };
-
   const gesture = Gesture.Pan()
     .onBegin((e) => {
-      // Reset color to white when starting a new gesture
-      runOnJS(setStrokeColor)('rgba(255, 255, 255, 0.8)');
-      
+      runOnJS(setResult)('idle');
       isInteracting.value = true;
       currentX.value = e.x;
       currentY.value = e.y;
-      
+
       const node = NODES.find(n => Math.hypot(n.x - e.x, n.y - e.y) < HIT_SLOP);
       if (node) {
         runOnJS(appendNode)(node.id);
@@ -99,7 +108,6 @@ export default function PatternLock({ onSuccess }: { onSuccess?: () => void }) {
     .onUpdate((e) => {
       currentX.value = e.x;
       currentY.value = e.y;
-
       const node = NODES.find(n => Math.hypot(n.x - e.x, n.y - e.y) < HIT_SLOP);
       if (node) {
         runOnJS(appendNode)(node.id);
@@ -109,43 +117,63 @@ export default function PatternLock({ onSuccess }: { onSuccess?: () => void }) {
       isInteracting.value = false;
       currentX.value = -1;
       currentY.value = -1;
-      
-      runOnJS((nodes: number[]) => {
-        // Only evaluate if they drew something
-        if (nodes.length === 0) return;
 
-        const isValid = evaluatePattern(nodes);
-        
-        if (isValid) {
-          // Exito Oncolo-educativo: Verde Brillante
-          setStrokeColor('rgba(60, 255, 80, 0.9)');
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          if (onSuccess) {
-            // Give them time to see the green before the modal pops
-            setTimeout(onSuccess, 500); 
-          }
-        } else {
-          // Error en el examen: Rojo Peligro
-          setStrokeColor('rgba(255, 60, 60, 0.9)');
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      runOnJS((nodes: number[]) => {
+        if (nodes.length < 3) {
+          setActiveNodes([]);
+          return;
         }
 
-        // Clear pattern after a visual delay
-        setTimeout(() => {
-          setActiveNodes([]);
-          setStrokeColor('rgba(255, 255, 255, 0.8)');
-        }, isValid ? 1500 : 1000);
+        const matched = validateAnyTechnique(nodes);
+
+        if (matched) {
+          setResult('success');
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setTimeout(() => {
+            if (onSuccess) onSuccess(matched);
+            setActiveNodes([]);
+            setResult('idle');
+          }, 1200);
+        } else {
+          setResult('error');
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          setTimeout(() => {
+            setActiveNodes([]);
+            setResult('idle');
+          }, 900);
+        }
       })(activeNodes);
     });
 
+  const guideAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: guideOpacity.value,
+  }));
+
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 0 }}>
       <View style={styles.container}>
         <GestureDetector gesture={gesture}>
           <View style={styles.gridContainer}>
-            {/* Draw active lines using SVG */}
             <Svg height={GRID_SIZE} width={GRID_SIZE} style={StyleSheet.absoluteFill}>
-              {/* Static lines for locked segments */}
+              {/* Ghost guide lines */}
+              {guidePath && guidePath.map((id, index) => {
+                if (index === 0) return null;
+                const prev = NODES[guidePath[index - 1]];
+                const curr = NODES[id];
+                return (
+                  <Line
+                    key={`guide-${index}`}
+                    x1={prev.x} y1={prev.y}
+                    x2={curr.x} y2={curr.y}
+                    stroke="rgba(255, 255, 255, 0.12)"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeDasharray="8,8"
+                  />
+                );
+              })}
+
+              {/* Active drawn lines */}
               {activeNodes.map((id, index) => {
                 if (index === 0) return null;
                 const prevNode = NODES[activeNodes[index - 1]];
@@ -153,48 +181,54 @@ export default function PatternLock({ onSuccess }: { onSuccess?: () => void }) {
                 return (
                   <Line
                     key={`line-${index}`}
-                    x1={prevNode.x}
-                    y1={prevNode.y}
-                    x2={currNode.x}
-                    y2={currNode.y}
-                    stroke={strokeColor}
-                    strokeWidth="8"
+                    x1={prevNode.x} y1={prevNode.y}
+                    x2={currNode.x} y2={currNode.y}
+                    stroke={getStrokeColor()}
+                    strokeWidth="6"
                     strokeLinecap="round"
                   />
                 );
               })}
-              
-              {/* Dynamic line following the finger while dragging */}
+
+              {/* Dynamic finger-following line */}
               {activeNodes.length > 0 && isInteracting.value && currentX.value !== -1 && (
-                <ActiveAnimatedLine
+                <FingerLine
                   x1={NODES[activeNodes[activeNodes.length - 1]].x}
                   y1={NODES[activeNodes[activeNodes.length - 1]].y}
                   currentX={currentX}
                   currentY={currentY}
-                  color={strokeColor}
+                  color={getStrokeColor()}
                 />
               )}
             </Svg>
 
-            {/* Draw nodes */}
+            {/* Nodes */}
             {NODES.map((node) => {
               const isActive = activeNodes.includes(node.id);
               const isCenter = node.id === 4;
+              const isGuideNode = guidePath?.includes(node.id) && !isActive;
 
               return (
-                <View
-                  key={node.id}
-                  style={[
-                    styles.node,
-                    { left: node.x - NODE_RADIUS, top: node.y - NODE_RADIUS },
-                    isActive && !isCenter && styles.nodeActive, // active state for white nodes
-                    isCenter && styles.nodeCenter,
-                  ]}
-                >
-                  {isCenter && (
-                    <View style={styles.nipple} />
+                <View key={node.id} style={[
+                  styles.nodeOuter,
+                  { left: node.x - NODE_RADIUS, top: node.y - NODE_RADIUS },
+                ]}>
+                  {/* Outer glow ring for active nodes */}
+                  {isActive && (
+                    <View style={[styles.glowRing, { borderColor: getStrokeColor(), shadowColor: getStrokeColor() }]} />
                   )}
-                  {isActive && !isCenter && <View style={[styles.innerDot, { backgroundColor: strokeColor === 'rgba(255, 255, 255, 0.8)' ? 'white' : strokeColor }]} />}
+                  
+                  <View style={[
+                    styles.node,
+                    isCenter && styles.nodeCenter,
+                    isActive && !isCenter && { borderColor: getStrokeColor(), backgroundColor: getNodeGlowColor() },
+                    isGuideNode && !isCenter && styles.nodeGuide,
+                  ]}>
+                    {isCenter && <View style={styles.nipple} />}
+                    {isActive && !isCenter && (
+                      <View style={[styles.innerDot, { backgroundColor: getStrokeColor() }]} />
+                    )}
+                  </View>
                 </View>
               );
             })}
@@ -205,24 +239,21 @@ export default function PatternLock({ onSuccess }: { onSuccess?: () => void }) {
   );
 }
 
-// Subcomponent for the dynamic line to encapsulate the useAnimatedProps cleanly
-const ActiveAnimatedLine = ({ x1, y1, currentX, currentY, color }: any) => {
-  const animatedProps = useAnimatedProps(() => {
-    return {
-      x2: currentX.value,
-      y2: currentY.value,
-    };
-  });
+// Animated line that follows the user's finger
+const FingerLine = ({ x1, y1, currentX, currentY, color }: any) => {
+  const animatedProps = useAnimatedProps(() => ({
+    x2: currentX.value,
+    y2: currentY.value,
+  }));
 
   return (
     <AnimatedLineComponent
-      x1={x1}
-      y1={y1}
+      x1={x1} y1={y1}
       animatedProps={animatedProps}
-      // @ts-ignore (Reanimated props mapping)
       stroke={color}
-      strokeWidth="8"
+      strokeWidth="6"
       strokeLinecap="round"
+      opacity={0.6}
     />
   );
 };
@@ -237,41 +268,57 @@ const styles = StyleSheet.create({
     height: GRID_SIZE,
     position: 'relative',
   },
-  node: {
+  nodeOuter: {
     position: 'absolute',
+    width: NODE_SIZE,
+    height: NODE_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glowRing: {
+    position: 'absolute',
+    width: NODE_SIZE + 12,
+    height: NODE_SIZE + 12,
+    borderRadius: (NODE_SIZE + 12) / 2,
+    borderWidth: 2,
+    opacity: 0.5,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+  },
+  node: {
     width: NODE_SIZE,
     height: NODE_SIZE,
     borderRadius: NODE_RADIUS,
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
-  nodeActive: {
-    borderColor: 'rgba(255, 255, 255, 1)',
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  nodeGuide: {
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  nodeCenter: {
+    backgroundColor: '#F5D0C5',
+    borderColor: '#E8BFB0',
+    borderWidth: 0,
+    shadowColor: '#D9A18E',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   innerDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'white',
-  },
-  // The center node (anatomical representation)
-  nodeCenter: {
-    backgroundColor: '#F5D0C5', // Skin tone base
-    borderColor: '#E2B8A8',
-    borderWidth: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
   },
   nipple: {
-    width: 22,
-    height: 22,
-    backgroundColor: '#D19A87', // Darker skin tone for the center
-    borderRadius: 11,
-  }
+    width: 20,
+    height: 20,
+    backgroundColor: '#D19A87',
+    borderRadius: 10,
+  },
 });
